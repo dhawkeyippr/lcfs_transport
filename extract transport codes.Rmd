@@ -1,0 +1,98 @@
+---
+title: "LCFS transport variables"
+author: "Dave Hawkey"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("C:/Users/DavidHawkey/standard_setup.r")
+```
+
+
+From excel documentation, transport codes are
+
+COICOP: Total Transport Costs
+sum of codes B244 + B245 + B247 + B249 + B250 + B252 + B248 + B218 + B217 +B219 + B216 + C71112 + C71122 + C71212 + C71311 + C71411 + C72111 + C72112 + C72113 + C72114 + C72115 + C72211 + C72212 + C72213 + C72313 + C72314 + C72411 + C72412 + C72413 + C72414 + C73112 + C73212 + C73213 + C73214 + C73311 + C73312 + C73411 + C73512 + C73513 + C73611 
+
+COICOP: Total Transport Costs
+sum of codes C71111c + C71121c + C71211c + C71311c + C71411c + C72111c + C72112c + C72113c + C72114c + C72115c + C72211c + C72212c + C72213c + C72311c + C72312c + C72313c + C72314c + C72411c + C72412c + C72413c + C72414c + C73112c + C73212c + C73213c + C73214c + C73311c + C73312c + C73411c + C73512c + C73513c + C73611c 
+
+COICOP: Total Transport Costs
+sum of codes B244 + B245 + B247 + B249 + B250 + B252 + B248 + B218 + B217 +B219 + B216 + B487 + B488 + C71111c + C71112t + C71121c + C71122t + C71211c + C71212t +C71311t + C71411t + C72111t + C72112t + C72113t + C72114t + C72115t +C72211t + C72212t + C72213t + C72311c + C72312c + C72313t + C72314t + C72411t + C72412t + C72413t + C72414t + C73112t + C73212t + C73213t + C73214t + C73411t + C73512t + C73513t + C73611t 
+
+What is each variable?
+
+```{r}
+
+lcfs_variables <- read.xlsx("C:/Users/DavidHawkey/Data/Living cost and food survey/LCF 2022-23/UKDA-9335-stata/mrdoc/excel/9335_volume_f_derived_variables_2022-23.xlsx", rows = 8:2832, cols = 1:5, colNames = F, sheet = "Part 2") %>% 
+  tibble()
+
+names(lcfs_variables) <- c("variable", "description", "table", "coding_frame", "inUKDA")
+
+```
+
+```{r}
+
+transport_codes <- str_split(
+  # string = "B244 + B245 + B247 + B249 + B250 + B252 + B248 + B218 + B217 +B219 + B216 + C71112 + C71122 + C71212 + C71311 + C71411 + C72111 + C72112 + C72113 + C72114 + C72115 + C72211 + C72212 + C72213 + C72313 + C72314 + C72411 + C72412 + C72413 + C72414 + C73112 + C73212 + C73213 + C73214 + C73311 + C73312 + C73411 + C73512 + C73513 + C73611",
+  # string = "B244 + B245 + B247 + B249 + B250 + B252 + B248 + B218 + B217 +B219 + B216 + B487 + B488 + C71111c + C71112t + C71121c + C71122t + C71211c + C71212t +C71311t + C71411t + C72111t + C72112t + C72113t + C72114t + C72115t +C72211t + C72212t + C72213t + C72311c + C72312c + C72313t + C72314t + C72411t + C72412t + C72413t + C72414t + C73112t + C73212t + C73213t + C73214t + C73411t + C73512t + C73513t + C73611t",
+  pattern = " *\\+ *"
+) %>% unlist()
+
+lcfs_variables %>% filter(tolower(variable) %in% tolower(transport_codes))
+
+```
+
+```{r}
+
+rpi_codes_adult <- str_split(
+  string = "71112, 92114, 71122, 92116, 71212, 72112, 72111, 91112, 72113, 31315, 72211, 72212, 72213, 72313, 72114, 72411, 72412, 72413, 72314, K3112",
+  pattern = ", "
+) %>% 
+  unlist()
+rpi_codes_adult <- paste0("c", rpi_codes_adult)
+
+rpi_codes_children <- str_split(
+  string = "71111, 92113, 71121, 92115, 71211, 72211, 72212, 72213, 72313, 72413, 72114, 72411, 72412, 72111, 72314, K3112, 72311, 72113, 91112, 72312, 72113, 31315, C5411",
+  pattern = ", "
+) %>% 
+  unlist()
+rpi_codes_children <- paste0("c", rpi_codes_children, "c")
+
+lcfs_variables %>% filter(tolower(variable) %in% rpi_codes_adult) %>% clipr::write_clip()
+lcfs_variables %>% filter(tolower(variable) %in% rpi_codes_children) %>% clipr::write_clip()
+```
+
+
+```{r}
+
+adult_fares <- "92111, 92117, 92311, C5412,71311,71411, 72115, 73112, 73212, 73512, 73311, 73312, 73411, 73513, 73213, 72414, 73214, 73611"
+child_fares <- "92111, 92117, 92311, C5412, 71311, 72115, 71411, 73112, 73212, 73512, 73311, 73312, 73411, 73513, 73213, 72414, 73214, 73611"
+
+adult_fare_codes <- str_split(
+  string = adult_fares %>% gsub(" ", "", .),
+  pattern = ","
+) %>% unlist()
+
+child_fare_codes <- str_split(
+  string = child_fares %>% gsub(" ", "", .),
+  pattern = ","
+) %>% unlist()
+
+total_fare_codes <- paste0("c", unique(c(adult_fare_codes, child_fare_codes)), "t")
+adult_fare_codes <- paste0("c", adult_fare_codes)
+child_fare_codes <- paste0("c", child_fare_codes, "c")
+
+lcfs_variables %>% filter(tolower(variable) %in% total_fare_codes) %>% clipr::write_clip()
+lcfs_variables %>% filter(tolower(variable) %in% adult_fare_codes) %>% clipr::write_clip()
+lcfs_variables %>% filter(tolower(variable) %in% child_fare_codes) %>% clipr::write_clip()
+
+```
+
+```{r}
+# lcfs_variables %>% filter(tolower(variable) %in% tolower(transport_codes)) %>% 
+#   write.xlsx("transport_codes_export.xlsx")
+
+```
