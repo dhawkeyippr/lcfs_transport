@@ -1,0 +1,658 @@
+---
+title: "LCFS transport data"
+author: "Dave Hawkey"
+date: "`r Sys.Date()`"
+output: powerpoint_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+source("C:/Users/DavidHawkey/standard_setup.r")
+knitr::opts_chunk$set(dev = "png")
+library(reldist)
+library(patchwork)
+```
+
+```{r}
+do_maya_variables <- TRUE
+if(do_maya_variables) {
+  code_sheet <- "variable definitions Maya"
+  labels_sheet <- "variable labels Maya"
+} else {
+  code_sheet <- "variable definitions Stephen"
+  labels_sheet <- "variable labels Stephen"
+}
+```
+
+
+```{r}
+transport_codes <- read.xlsx("C:/Users/DavidHawkey/R projects/Energy and climate/lcfs_transport/transport_codes_input.xlsx", sheet = code_sheet) %>% tibble()
+transport_labels <- read.xlsx("C:/Users/DavidHawkey/R projects/Energy and climate/lcfs_transport/transport_codes_input.xlsx", sheet = labels_sheet) %>% tibble()
+
+other_variables <- c(
+  "a124", #	Cars and vans in household
+  "weighta", #Annual weight
+  "weightq", #	Quarterly weight
+  "a040", #	Number of children children-age under 2
+  "a041", #	Number of children children-age 2 but un
+  "a042", #	Number of children children-age 5 but un
+  "a0423", #	Number of children completing a diary
+  "a043", #	Number of adults-age under 45
+  "a044", #	Number of adults-age 45 but under 60
+  "a045", #	Number of adults-age 60 but under 65
+  "a046", #	Number of adults-age 65 but under 70
+  "a047", #	Number of adults-age 70 and over
+  "a049", #	Number of persons in household
+  "a053", #	Households with married women (econ active)
+  "a054", #	Number of workers in household
+  "a055", #	Sampling month
+  "a056", #	Number of persons economically active
+  "a057", #	Men 65+ women 60+ economically active
+  "a058", #	Others - not economically active
+  "a060", #	Gross normal income of HRP by range
+  "a062", #	Composition of Household
+  "EqIncDOp", #	Equivalised income (OECD Scale) - anonymised	dvhh		Yes
+  "a069p", #	Type of household - Anonymised
+  "case", #	case number anonymised
+  "gorx", #	Government Office Region modified"
+  "p564", # Running of motor vehicles
+  "P153t", # 	Total  personal  expenditure by adults and children:‑
+  "P550tp", #	Total  expenditure, by adults and children (anonymised data):-
+  "P600t", #	COICOP: Total Consumption Expenditure
+  "P630tp", #	COICOP:Total Expenditure (anonymised)
+  "P545t", #	ONS motoring expenditure, by adults and children (negative values possible):-
+  
+
+
+  
+  "a069p", #	Type of household - Anonymised
+  "a091", #	Socio-economic group - HRP
+  "a093", #	Economic position of Household Reference
+  "a094", #	NS-SEC 12 Class of HRP
+  "a116", #	Category of dwelling
+  
+  "p389p", #	Normal weekly disposable household income - anonymised
+  
+  "a012p" #	Ethnic origin of HRP - anonymised
+  
+
+)
+```
+
+```{r warning=FALSE}
+lcfs_year <- c(2016:2019,2021:2022)
+
+lcfs <- load_lcf(
+  year = lcfs_year,
+  col_select = c(paste0("^", transport_codes$variable, "$"), other_variables),
+  force_lower_case = TRUE
+) 
+
+cpi <- suppressMessages(load_cpi())
+cpi$to2024 <- cpi$cpi[cpi$time == 2024] / cpi$cpi
+
+lcfs <- lcfs %>% 
+  left_join(
+    cpi,
+    by = c("my_year" = "time")
+  )
+
+```
+
+## Analysis years
+
+```{r results='asis'}
+
+for(y in lcfs_year) {
+  cat("\n\n*", y, "\n")
+}
+
+```
+
+```{r person-level-data}
+# lcfs_person_level_variables <- c(
+#   "a285", #	Company car/van provided by employer
+#   "a2851", #	Company car provided by employer
+#   "a2852" #	Company van provided by employer
+# )
+# 
+# lcfs_person = load_lcfs(lcf_table = "dvper", year = lcfs_year, col_select = c("case", lcfs_person_level_variables), force_lower_case = TRUE)
+# lcfs_from_person <- lcfs_person %>% 
+#   group_by(my_year, case) %>% 
+#   summarise(
+#     gets_a_company_car = any(a2851 == 1),
+#     .groups = "drop"
+#   )
+# 
+# lcfs <- lcfs %>% 
+#   left_join(
+#     lcfs_from_person, 
+#     by = c("my_year", "case")
+#   )
+```
+
+
+```{r check-we-have-all-variables}
+# This checks out fine
+# setdiff(transport_codes$variable, names(lcfs))
+# setdiff(tolower(other_variables), names(lcfs))
+# setdiff(names(lcfs), c(transport_codes$variable, other_variables))
+```
+
+```{r}
+
+lcfs_transport <- lcfs %>% 
+  select(case, my_year, transport_codes$variable) %>% 
+  pivot_longer(cols = transport_codes$variable, names_to = "variable", values_to = "lcfs_value") %>%
+  left_join(
+    transport_codes %>% select(-c("description")),
+    by = "variable"
+  ) %>% 
+  pivot_longer(cols = (transport_codes %>% select(-c("variable", "description")) %>% names()), values_to = "my_coefficient", names_to = "my_variable") %>% 
+  group_by(my_year, case, my_variable) %>% 
+  summarise(my_value = sum(my_coefficient * lcfs_value), .groups = "drop") %>% 
+  pivot_wider(names_from = "my_variable", values_from = "my_value") 
+
+lcfs_transport <- lcfs %>% left_join(lcfs_transport, by = c("my_year", "case")) %>% ungroup()
+
+# put labels on our new variables
+for(v in transport_labels$variable) {
+  label = transport_labels %>% filter(variable == v) %>% pull(label)
+  lcfs_transport[[v]] <- labelled(lcfs_transport[[v]], label = label)
+}
+
+```
+
+
+```{r make-equivalisation-factors}
+eq_factors <- lcfs_transport %>% count(equiv_fact_common = p389p / eqincdop, a062, wt = weighta) %>% arrange(desc(n)) %>% group_by(a062) %>% slice_head(n = 1) %>% select(equiv_fact_common, a062)
+
+max_income <- lcfs_transport %>% group_by(my_year) %>% summarise(max_income = max(p389p), .groups = "drop")
+
+lcfs_transport <- lcfs_transport %>% 
+  left_join(eq_factors, by = "a062", suffix = c("OLDDROP", "")) %>% 
+  left_join(max_income, by = "my_year", suffix = c("OLDDROP", "")) %>%
+  select(-ends_with("OLDDROP")) %>% 
+  mutate(
+    r = p389p / eqincdop,
+    eq_fact = case_when(
+      p389p == max_income ~ equiv_fact_common,
+      is.na(r) ~ equiv_fact_common,
+      TRUE ~ p389p / eqincdop
+    ),
+    
+    incomeVar = eqincdop * eq_fact, # Estimate income of higher income households based on their equivalised income and best guess equivalisation factor
+    total_expenditure = p630tp
+  )
+
+# lcfs_transport %>% 
+#   filter(a062 < 20) %>% 
+#   ggplot(
+#     aes(
+#       x = incomeVar,
+#       y = incomeVar / eqincdop,
+#       colour = as_factor(a062)
+#     )
+#   ) + 
+#   geom_point()
+
+```
+
+
+```{r any_children}
+lcfs_transport <- lcfs_transport %>% 
+  mutate(
+    n_kids = labelled(a040 + a041 + a042, label = "Number of children"),
+    any_kids = labelled(ifelse(n_kids > 0, "Kids", "No kids"), label = "Any children"),
+    single_parent = case_when(
+      a062 %in% c(3, 4, 5, 6) ~ 1,
+      n_kids > 0 ~ 2,
+      TRUE ~ 3
+    ) %>% 
+      labelled(labels = c("Single parent" = 1, "Not single parent" = 2, "No kids" = 3), label = "Single parent")
+  )
+
+# lcfs_transport %>% count(a062, single_parent, n_kids) %>% as_factor()
+
+```
+
+```{r make_income_deciles}
+lcfs_transport <- lcfs_transport %>% 
+  group_by(my_year) %>% 
+  arrange(incomeVar) %>% 
+  mutate(
+    pos = (cumsum(weighta) - weighta / 2) / sum(weighta),
+    incomeDecile = ceiling(pos * 10) %>% labelled(label = "Income decile (not equivalised)")
+  ) %>% 
+  arrange(eqincdop) %>% 
+  mutate(
+    pos_eq = (cumsum(weighta) - weighta / 2) / sum(weighta),
+    incomeDecile_eq = ceiling(pos_eq * 10) %>% labelled(label = "Equivalised income decile")
+  ) %>% 
+  ungroup()
+```
+
+```{r company-car-by-decile}
+
+# lcfs_transport %>% 
+#   mutate(
+#     number_of_cars_vans = case_when(
+#       a124 == 1 ~ 1,
+#       a124 == 2 ~ 2,
+#       a124 >= 3 ~ 3,
+#       TRUE ~ NA_real_
+#     ) %>% 
+#       labelled(labels = c(
+#         "One car" = 1,
+#         "Two cars/vans" = 2,
+#         "Three or more cars/vans" = 3
+#       ))
+#   ) %>% 
+#   # count(incomeDecile_eq, number_of_cars_vans = ifelse(a124 == 1, 1, 0) %>% labelled(labels = c("One car" = 1, "Multiple cars" = 0)), wt = weighta) %>% 
+#   count(grouping_var = gorx, gets_a_company_car, number_of_cars_vans, wt = weighta) %>% 
+#   group_by(grouping_var) %>% 
+#   mutate(p = n / sum(n)) %>% 
+#   ungroup() %>% 
+#   filter(gets_a_company_car) %>% 
+#   ggplot(
+#     aes(
+#       x = as_factor(grouping_var),
+#       y = p,
+#       fill = as_factor(number_of_cars_vans)
+#     )
+#   ) + 
+#   geom_col() +
+#   coord_flip() +
+#   scale_y_continuous(labels = scales::percent) +
+#   labs(y = "Share of households with a company car", x = "AHC equivalised income decile")
+
+```
+
+```{r set-theme}
+
+theme_update(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+```
+
+```{r measure-functions}
+
+analyse_annual_expenditure <- function(d, analysis_label_only = FALSE) {
+  analysis_label <- "Expenditure (£2024)"
+  vlab <- attr(d$target_variable, "label")
+  d <- d %>% mutate(target_variable = (target_variable * to2024 * 365 / 7) %>% labelled(label = vlab))
+  attr(d$target_variable, "metric") <- analysis_label
+  attr(d$target_variable, "scale") <- "GBP"
+  if(analysis_label_only) {
+    analysis_label
+  } else {
+    d
+  }
+}
+
+analyse_annual_expenditure_equivalised <- function(d, analysis_label_only = FALSE) {
+  analysis_label <- "Expenditure (£2024 equivalised)"
+  vlab <- attr(d$target_variable, "label")
+  d <- d %>% mutate(target_variable = (target_variable * to2024 / eq_fact * 365 / 7) %>% labelled(label = vlab))
+  attr(d$target_variable, "metric") <- analysis_label
+  attr(d$target_variable, "scale") <- "GBP"
+  if(analysis_label_only) {
+    analysis_label
+  } else {
+    d
+  }
+}
+
+analyse_share_total_expenditure <- function(d, analysis_label_only = FALSE) {
+  analysis_label <- "Share of total expenditure"
+  vlab <- attr(d$target_variable, "label")
+  d <- d %>% mutate(target_variable = (target_variable / total_expenditure) %>% labelled(label = vlab))
+  attr(d$target_variable, "metric") <- analysis_label
+  attr(d$target_variable, "scale") <- "percent"
+  if(analysis_label_only) {
+    analysis_label
+  } else {
+    d
+  }
+}
+
+analyse_share_income <- function(d, analysis_label_only = FALSE) {
+  analysis_label <- "Share of income"
+  vlab <- attr(d$target_variable, "label")
+  d <- d %>% mutate(target_variable = (target_variable / incomeVar) %>% labelled(label = vlab))
+  attr(d$target_variable, "metric") <- analysis_label
+  attr(d$target_variable, "scale") <- "percent"
+  if(analysis_label_only) {
+    analysis_label
+  } else {
+    d
+  }
+}
+
+exclude_zeros <- function(d) {
+  vlab <- attr(d$target_variable, "label")
+  vlab <- paste0(vlab, " (excluding zeros)")
+  attr(d$target_variable, "label") <- vlab
+  d %>% filter(target_variable > 0)
+}
+
+include_zeros <- function(d) {
+  vlab <- attr(d$target_variable, "label")
+  vlab <- paste0(vlab, " (including zeros)")
+  attr(d$target_variable, "label") <- vlab
+  d
+}
+
+my_labs <- function(d) {
+  vlabel <- attr(d$target_variable, "label")
+  glabel <- attr(d$grouping_variable, "label")
+  mlabel <- attr(d$target_variable, "metric")
+  this_scale <- attr(d$target_variable, "scale") 
+
+  if(this_scale == "percent") {
+    yscale = scale_y_continuous(labels = scales::percent)
+    coord = coord_cartesian(ylim = c(-0.1, 1.5))
+  }
+  if(this_scale == "GBP") {
+    yscale = scale_y_continuous(labels = scales::label_dollar(prefix = "£"))
+    coord = coord_cartesian()
+  }
+  
+  list(
+    labs(subtitle = mlabel, x = glabel, y = mlabel),
+    yscale#,
+    # coord
+  )
+}
+```
+
+```{r define-plots}
+
+lcfs_mean_spend <- function(d, ylab = "Mean spend") {
+  vlabel <- attr(d$target_variable, "label")
+  # glabel <- attr(d$grouping_variable, "label")
+ 
+
+  mean_tab <- d %>% 
+    as_survey_design(weight = weighta) %>% 
+    group_by(grouping_variable) %>% 
+    summarise(mean_spend = survey_mean(target_variable, vartype = "ci"), .groups = "drop")
+  
+  plt <- mean_tab %>% 
+    ggplot(
+      aes(
+        x = as_factor(grouping_variable),
+        y = mean_spend,
+        ymax = mean_spend_upp,
+        ymin = mean_spend_low
+      )
+    ) + 
+    geom_col() + 
+    geom_errorbar() + 
+    #labs(title = vlabel, x = glabel, y = ylab)
+    my_labs(d)
+  
+  #print(plt)
+  plt
+}
+
+lcfs_mean_spend_no_zero <- function(d) {
+  d %>% filter(target_variable > 0) %>% lcfs_mean_spend(ylab = "Mean spend (excl zeros)")
+}
+
+lcfs_boxplot <- function(d, exclude_outliers = TRUE) {
+  vlabel <- attr(d$target_variable, "label")
+  # glabel <- attr(d$grouping_variable, "label")
+  
+  # cat("\n\n## Boxplot spend - ", vlabel, "\n\n")
+  
+  plt <- d %>% 
+    ggplot(
+      aes(
+        x = as_factor(grouping_variable),
+        y = target_variable,
+        weight = weighta
+      )
+    ) + 
+    # labs(title = vlabel, x = glabel, y = ylab)
+    my_labs(d)
+  
+  if(exclude_outliers) {
+    ylim <- d %>% 
+      group_by(grouping_variable) %>% 
+      summarise(
+        median = reldist::wtd.quantile(target_variable, q = 0.5, weight = weighta, na.rm = T),
+        p75 = reldist::wtd.quantile(target_variable, q = 0.75, weight = weighta, na.rm = T),
+        .groups = "drop"
+      ) %>% 
+      mutate(
+        med_plus_box_plus_whisker = median + 4 * (p75 - median)
+      ) %>% 
+      summarise(
+        max_plot_value = max(med_plus_box_plus_whisker)
+      )
+    plt <- plt + geom_boxplot(outlier.shape = NA) + coord_cartesian(ylim = c(0, ylim$max_plot_value))
+  } else {
+    plt <- plt + geom_boxplot()
+  }
+  
+  # ylim1 = boxplot.stats(df$y)$stats[c(1, 5)]
+  
+  # print(plt)
+  plt
+}
+
+# lcfs_boxplot_no_zero <- function(d) {
+#   d %>% filter(target_variable > 0) %>% lcfs_boxplot(ylab = "Mean spend (excl zeros)")
+# }
+
+lcfs_proportion_zero_table <- function(d) {
+  
+
+  prop_tab <- d %>% 
+    as_survey_design(weight = weighta) %>% 
+    group_by(grouping_variable, no_spend = target_variable == 0) %>%
+    summarise(p_zero = survey_prop(vartype = "ci", proportion = TRUE), .groups = "drop") 
+    
+  prop_tab %>% filter(no_spend)
+}
+
+lcfs_proportion_zero_plot <- function(d) {
+  vlabel <- attr(d$target_variable, "label")
+  glabel <- attr(d$grouping_variable, "label")
+  
+
+  plt <- lcfs_proportion_zero_table(d) %>% 
+    ggplot(
+      aes(
+        x = as_factor(grouping_variable),
+        y = p_zero,
+        ymax = p_zero_upp,
+        ymin = p_zero_low
+      )
+    ) + 
+    geom_col() + 
+    geom_errorbar() +
+    labs(title = vlabel, x = glabel, y = "Proportion spending zero") +
+    scale_y_continuous(labels = scales::percent)
+  
+  # print(plt)
+  plt
+}
+
+# lcfs_transport <- lcfs_transport %>% 
+#   mutate(
+#     target_variable = vehicle_total,
+#     grouping_variable = incomeDecile
+#   )
+
+# lcfs_transport %>% 
+#   exclude_zeros() %>%
+#   analyse_share_income() %>% 
+#   lcfs_mean_spend()
+# lcfs_mean_spend(lcfs_transport)
+# lcfs_boxplot_no_zero(lcfs_transport)
+# lcfs_proportion_zero_plot(lcfs_transport)
+
+```
+
+
+
+```{r make-all-the-charts, fig.height=6, fig.width=14, warning=FALSE, results='asis'}
+# variable_list <- c("vehicle_total")
+variable_list <- transport_labels$variable
+grouping_list <- c("incomeDecile", "incomeDecile_eq", "gorx", "any_kids", "n_kids", "single_parent", "a093", "a094", "a116")
+# grouping_list <- "a094"
+
+cat("\n\n## Spend items\n\n")
+for(v in variable_list) {
+  vlab = attr(lcfs_transport[[v]], "label")
+  start_slide_n <- 5 + (which(variable_list == v) - 1) * length(grouping_list) * 5
+  cat("*", vlab, "starts at slide", start_slide_n, "\n")
+}
+
+cat("\n\n## Groupings\n\n")
+for(g in grouping_list) {
+  glab = attr(lcfs_transport[[g]], "label")
+  cat("*", glab, "\n")
+}
+
+analysis_list <- function(force_unequivalised) c(
+  ifelse(force_unequivalised, analyse_annual_expenditure, analyse_annual_expenditure_equivalised), 
+  analyse_share_total_expenditure,
+  analyse_share_income
+)
+
+for(v in variable_list) {
+  lcfs_transport$target_variable <- lcfs_transport[[v]]
+  vlab <- attr(lcfs_transport$target_variable, "label")
+
+  # 
+  lcfs_as_survey <- lcfs_transport %>%
+    as_factor() %>% 
+    as_survey_design(weight = weighta)
+  
+  # m_inc <- svyglm(
+  #   formula = target_variable == 0 ~ incomeDecile_eq,
+  #   design = lcfs_as_survey,
+  #   family = "binomial"
+  # ) 
+  # m_inc_reg <- svyglm(
+  #   formula = target_variable == 0 ~ incomeDecile_eq + gorx,
+  #   design = lcfs_as_survey,
+  #   family = "binomial"
+  # )  
+  # m <- svyglm(
+  #   formula = target_variable == 0 ~ incomeDecile_eq + gorx + single_parent,
+  #   design = lcfs_as_survey,
+  #   family = "binomial"
+  # )
+  # 
+  # cat("\n\n##", vlab, "- zero spend regression coefficients\n\n")
+  # print(summary(m))
+  # cat("\n\n##", vlab, "- zero spend regression anova\n\n")
+  # print(anova(m))
+  # 
+  
+  for(g in grouping_list) {
+    force_unequivalised = (g == "incomeDecile")
+    lcfs_transport$grouping_variable <- lcfs_transport[[g]]
+    glab <- attr(lcfs_transport$grouping_variable, "label")
+    cat("\n\n")
+    cat("# ")
+    cat(vlab, "by", attr(lcfs_transport$grouping_variable, "label"))
+    cat("\n\n")
+    
+    cat("## ", vlab, "- proportion zero spend", " \n\n")
+    
+    plt <- lcfs_transport %>% 
+      lcfs_proportion_zero_plot()
+    print(plt)
+    
+    
+    inc_z <- "excluding zeros"
+    for(zero_treatment in c(exclude_zeros)) { #, include_zeros)) {
+      is_first_plot <- TRUE
+      is_first_time_plot <- TRUE
+      # cat("\n\n")
+      # cat("## ", vlab, inc_z, " \n\n")
+      # inc_z <- "including zeros"
+      for(analysis in analysis_list(force_unequivalised)) {
+        # for(chart_function in c(lcfs_mean_spend, lcfs_boxplot)) {
+          
+          
+          this_mean_plot <-
+            lcfs_transport %>% 
+            zero_treatment() %>% 
+            analysis() %>% 
+            lcfs_mean_spend()
+          
+          this_box_plot <-
+            lcfs_transport %>% 
+            zero_treatment() %>% 
+            analysis() %>% 
+            lcfs_boxplot()
+          
+          if(is_first_plot) {
+            whole_mean_plot <- this_mean_plot
+            whole_box_plot <- this_box_plot
+            is_first_plot <- FALSE
+          } else{
+            whole_mean_plot <- whole_mean_plot + this_mean_plot
+            whole_box_plot <- whole_box_plot + this_box_plot
+          }
+          
+        # }
+        
+        this_time_plot <- 
+          lcfs_transport %>% 
+          zero_treatment() %>% 
+          analysis() %>% 
+          group_by(my_year, grouping_variable) %>% 
+          summarise(
+            med = reldist::wtd.quantile(target_variable, q = 0.5, na.rm = TRUE, weight = weighta),
+            .groups = "drop"
+          ) %>% 
+          as_factor() %>% 
+          ggplot(
+            aes(
+              x = my_year,
+              y = med,
+              # ymax = med_upp,
+              # ymin = med_low,
+              colour = as_factor(grouping_variable),
+              fill = as_factor(grouping_variable)
+            )
+          ) +
+          # geom_ribbon(alpha = 0.5, linetype = NA) +
+          geom_line() +
+          labs(colour = glab, fill = NULL, y = analysis(lcfs_transport, analysis_label_only = TRUE),  x = NULL)
+        
+        if(is_first_time_plot) {
+          time_plot <- this_time_plot
+          is_first_time_plot <- FALSE
+        } else {
+          time_plot <- time_plot + this_time_plot
+        }
+      }
+      # whole_plot <- whole_plot + plot_layout(nrow = 2, byrow = FALSE)
+      # print(whole_plot)
+
+      cat("\n\n##", vlab, inc_z, "- mean\n\n")
+      whole_mean_plot <- whole_mean_plot + plot_layout(nrow = 1)
+      print(whole_mean_plot)
+      
+      cat("\n\n##", vlab, inc_z, "- boxplot\n\n")
+      whole_box_plot <- whole_box_plot + plot_layout(nrow = 1)
+      print(whole_box_plot)
+      
+      cat("\n\n##", vlab, inc_z, "- median over time\n\n")
+      time_plot <- time_plot + plot_layout(nrow = 1, guides = "collect")
+      print(time_plot)
+      
+    }
+  }
+
+}
+```
+
+
