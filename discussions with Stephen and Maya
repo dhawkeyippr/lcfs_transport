@@ -16,3 +16,80 @@ Q: differnce between this and national travel survey
 Difference between people with and without kids.
 
 School travel by income
+
+
+
+
+
+Constraints
+1. Ethnic origin data is not available
+
+
+
+
+
+Is it possible to export these into data tables as well so I/we can see the actual figures and play around with it a little?
+DONE Yes, totally possible, will build that in.
+
+Does motoring costs include motoring fines & vehicle insurance?
+DONE They're inculded in "operation of private vehicles" and "total cost of private vehicles" 
+
+Are any of these available as groupings: rural / urban classification, household structure, disability, car ownership and age?
+DONE Urban/rural: no - I guess ONS thinks it would be disclosive. 
+NOT DONE household structure: yes, in terms of number of adults and number of children
+NOT DONE disability: I don't think LCFS collects equality act definitions of disability. It does ask about disability benefits and whether sickness/disability is the reason for economic inactivity. So we can identify households with a disabled person, but might miss some. I suggest we go with "received disability benefits". Sound OK?
+DONE car ownership: yes. There's also a "cars owned or used" variable - I think we just want ownership, but let me know if "or used" is helpful. There's also a "cars or vans in the household" variable - would that be better?
+DONE age: age of the household reference person in five year bands
+
+I like how you’ve split out the proportion zero spend – that is very helpful context. It would be great to be able to see the overall expenditure figures for each category including/excluding zeros. Figs 4 and 5 here give helpful context on the impact of fuel duty increases on different income groups depending on whether you consider all households, or just those who own a car.
+DONE Yes, easy to do both analyses. My gut feeling is its more informative to know how many spend zero and then what the average of the rest is. If you have a low income and something you need costs a lot, the fact that lots of other people with a similar income spend nothing doesn't really change the impact on you. Though I suppose the same could be said of others in your income bracket spending very little. I'll get the code to spit out both and keep thinking about it.
+
+Are you able to produce a summary that looks at overall cost of a) surface transport, b) domestic transport and c) domestic + international transport?
+DONE I think so - by domestic transport do you just mean surface transport plus domestic travel? Do you count water travel as surface travel?
+
+Is it possible to look at the expenditure of those on lowest income decile (and lowest income quintile) split by other socio-demographic characteristics (eg whether they live in an urban/rural area). This would allow us to understand how the experience of those on a low income differ based on these other factors.
+NOT DONE Yes, can build this in. For "income decile" do you want it to be AHC equivalised income (the income definition used for poverty calculations)? I need to get TBM on the case for that. Using TBM we could also do what you suggest, but for households in poverty.
+
+
+
+
+Highlighted where Maya wants to use stats.
+
+* Engagement with a nursery in Sheffield and Poverty Alliance in Scotland. Looking at transport and low income fams.
+* Predominantly qual
+* Specific recs to Sheffield (including v specific around the nursery)
+* My stuff helps on the household bills stuff (Josh)
+* Text in end of next week
+* QA process - Abi and Richard hate it when it hasn't been done
+* The arguments
+** Travel behaviours and costs faced by people on low incomes
+** Started with national travel survey
+** Behaviours are entirely predictable
+** Distance travelled correlates with income
+** Bus inversely correlated with income
+** Higher earners cycle more
+** Bus provision has declined most in the poorest areas
+*** MY STUFF
+**** Costs of running a car
+**** 5 million people pushed into poverty because of transport
+**** Things to unpick
+****** Spending on transport as a whole
+****** Spending on cars as a whole
+****** Breakdown within that
+****** Total cost of private vehicles (consistent as a % of spend)
+****** Unexpected costs of cars -- handling having to spend a load!
+**** Recommendations
+***** Most focus on improving public transport
+***** Reducing the cost of running a car for those who need it
+***** A social leasing scheme for EVs
+***** Reduced EV charging cost (social tariff?)
+***** Want to say: running a car is expensive, a better public transport system is good
+***** SMF do look at the freeze...
+***** Once you own a car, are you trapped in a car
+-------- Include zeros, who is spending zero on one, the other or both. Car vs bus vs nothing.
+
+
+Blueprints puzzle game
+
+
+
